@@ -1,0 +1,108 @@
+esphome:
+  name: bee-motion-s3
+  friendly_name: "Bee Motion S3"
+
+  on_boot:
+    priority: 800
+    then:
+      - switch.turn_on: peripheral_power
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+api:
+  encryption:
+    key: !secret bee_motion_s3__encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret bee_motion_s3__ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+logger:
+  level: DEBUG
+
+switch:
+  - platform: gpio
+    pin: GPIO34
+    id: peripheral_power
+    name: "Peripheral Power GPIO34"
+    restore_mode: ALWAYS_ON
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO2
+      mode:
+        input: true
+    id: usb_connected
+    name: "USB Connected"
+    device_class: plug
+    
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode:
+        input: true
+        pulldown: true
+    id: pir_motion
+    name: "PIR Motion"
+    device_class: motion
+
+    filters:
+      - delayed_off: 5s
+
+sensor:
+  # Ambient light - known working
+  - platform: adc
+    pin: GPIO3
+    id: ambient_light_raw
+    name: "Ambient Light Raw"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    accuracy_decimals: 4
+    update_interval: 2s
+
+  
+  # Raw battery ADC
+  - platform: adc
+    pin: GPIO1
+    id: battery_adc_raw
+    name: "Battery ADC Raw"
+    attenuation: 12db
+    unit_of_measurement: "V"
+    accuracy_decimals: 4
+    update_interval: 10s
+
+  # Calculated battery voltage
+  - platform: template
+    id: battery_voltage
+    name: "Battery Voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      return id(battery_adc_raw).state * 3.7625;
+
+  - platform: template
+    id: battery_percent
+    name: "Battery Percentage"
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      float v = id(battery_voltage).state;
+
+      if (v >= 4.20) return 100.0;
+      if (v <= 3.20) return 0.0;
+
+      return (v - 3.20) * 100.0;
